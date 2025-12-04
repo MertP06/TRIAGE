@@ -1,16 +1,13 @@
 package com.acil.er_backend.controller;
 
-import com.acil.er_backend.dto.ApiResponse;
-import com.acil.er_backend.dto.AppointmentDetailResponse;
+import com.acil.er_backend.dto.*;
 import com.acil.er_backend.model.Appointment;
 import com.acil.er_backend.model.AppointmentStatus;
 import com.acil.er_backend.service.AppointmentService;
-import jakarta.validation.Valid;
-import jakarta.validation.constraints.NotNull;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.*;
+import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/appointments")
@@ -22,98 +19,80 @@ public class AppointmentController {
         this.appointmentService = appointmentService;
     }
 
-    // 1) Randevu oluştur
-    @PostMapping
-    public ResponseEntity<ApiResponse<Map<String, Object>>> create(
-            @RequestBody @Valid CreateAppointmentRequest req) {
-        Appointment ap = appointmentService.createAppointment(req.patientId);
-        long ahead = appointmentService.countWaitingAheadFor(ap);
-
-        Map<String, Object> resp = new HashMap<>();
-        resp.put("appointmentId", ap.getId());
-        resp.put("queueNumber", ap.getQueueNumber());
-        resp.put("status", ap.getStatus().name());
-        resp.put("aheadCount", ahead);
-        resp.put("appointmentDate", ap.getAppointmentDate().toString());
-        
-        return ResponseEntity.ok(ApiResponse.success("Randevu başarıyla oluşturuldu.", resp));
-    }
-
-    // 2) TC ile durum
-    @GetMapping("/status/{tc}")
-    public ResponseEntity<ApiResponse<Map<String, Object>>> status(@PathVariable String tc) {
-        return appointmentService.findTodayActiveByTc(tc)
-                .<ResponseEntity<ApiResponse<Map<String, Object>>>>map(ap -> {
-                    long ahead = appointmentService.countWaitingAheadFor(ap);
-                    Map<String, Object> data = Map.of(
-                            "appointmentId", ap.getId(),
-                            "appointmentDate", ap.getAppointmentDate().toString(),
-                            "status", ap.getStatus().name(),
-                            "aheadCount", ahead,
-                            "queueNumber", ap.getQueueNumber());
-                    return ResponseEntity.ok(ApiResponse.success(data));
-                })
-                .orElseGet(() -> ResponseEntity.ok(ApiResponse.success(
-                        Map.of("hasActive", false, "message", "Bugün için aktif randevu bulunamadı."))));
-    }
-
-    // 3) Bugünkü randevular
-    @GetMapping("/today")
-    public ResponseEntity<ApiResponse<List<Appointment>>> today(
-            @RequestParam(required = false) AppointmentStatus status) {
-        List<Appointment> appointments = status != null 
-                ? appointmentService.listTodayByStatus(status)
-                : appointmentService.listToday();
-        return ResponseEntity.ok(ApiResponse.success(appointments));
-    }
-
-    // 3.a) Bugün - sıradaki bekleyen (en küçük sıra numarası)
-    @GetMapping("/today/next")
-    public ResponseEntity<ApiResponse<Map<String, Object>>> nextWaiting() {
-        List<Appointment> waiting = appointmentService.listTodayByStatus(AppointmentStatus.WAITING);
-        if (waiting.isEmpty()) {
-            return ResponseEntity.ok(ApiResponse.success(Map.of("hasNext", false)));
+    @GetMapping
+    public List<Appointment> getToday(@RequestParam(required = false) AppointmentStatus status) {
+        if (status != null) {
+            return appointmentService.getTodayAppointmentsByStatus(status);
         }
-        Appointment next = waiting.get(0);
-        Map<String, Object> data = Map.of(
-                "hasNext", true,
-                "appointmentId", next.getId(),
-                "queueNumber", next.getQueueNumber(),
-                "patient", next.getPatient());
-        return ResponseEntity.ok(ApiResponse.success(data));
+        return appointmentService.getTodayAppointments();
     }
 
-    // 4) Durum güncelle
+    @PostMapping
+    public ResponseEntity<ApiResponse<Appointment>> create(@RequestBody Map<String, Object> body) {
+        String patientTc = (String) body.get("patientTc");
+        String chiefComplaint = (String) body.get("chiefComplaint");
+        Integer urgencySelfAssessment = body.get("urgencySelfAssessment") != null
+                ? Integer.valueOf(body.get("urgencySelfAssessment").toString()) : null;
+
+        if (patientTc == null || patientTc.isBlank()) {
+            return ResponseEntity.badRequest().body(ApiResponse.error("patientTc boş olamaz."));
+        }
+
+        try {
+            Appointment ap = appointmentService.createAppointment(patientTc, chiefComplaint, urgencySelfAssessment);
+            return ResponseEntity.ok(ApiResponse.success("Randevu oluşturuldu.", ap));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage()));
+        }
+    }
+
     @PatchMapping("/{id}/status")
-    public ResponseEntity<ApiResponse<Map<String, Object>>> updateStatus(
-            @PathVariable Long id, 
-            @RequestParam @NotNull AppointmentStatus status) {
-        Appointment ap = appointmentService.updateStatus(id, status);
-        Map<String, Object> data = Map.of(
-                "appointmentId", ap.getId(),
-                "status", ap.getStatus().name());
-        return ResponseEntity.ok(ApiResponse.success("Durum güncellendi.", data));
+    public ResponseEntity<ApiResponse<Appointment>> updateStatus(
+            @PathVariable Long id, @RequestBody Map<String, String> body) {
+        try {
+            AppointmentStatus status = AppointmentStatus.valueOf(body.get("status"));
+            Appointment ap = appointmentService.updateStatus(id, status);
+            return ResponseEntity.ok(ApiResponse.success("Durum güncellendi.", ap));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage()));
+        }
     }
 
-    // 5) Sil
-    @DeleteMapping("/{id}")
-    public ResponseEntity<ApiResponse<Map<String, Object>>> deleteAppointment(@PathVariable Long id) {
-        appointmentService.deleteAppointment(id);
-        return ResponseEntity.ok(ApiResponse.success(
-                "Randevu başarıyla silindi.", Map.of("appointmentId", id)));
-    }
-
-    // 6) Doktor ekranı: detay (DTO ile)
     @GetMapping("/{id}/detail")
-    public ResponseEntity<ApiResponse<AppointmentDetailResponse>> detail(@PathVariable Long id) {
-        AppointmentDetailResponse dto = appointmentService.getAppointmentDetail(id);
-        return ResponseEntity.ok(ApiResponse.success(dto));
+    public ResponseEntity<AppointmentDetailResponse> getDetail(@PathVariable Long id) {
+        try {
+            return ResponseEntity.ok(appointmentService.getDetail(id));
+        } catch (Exception e) {
+            return ResponseEntity.notFound().build();
+        }
     }
 
-    // --- DTO ---
-    public static class CreateAppointmentRequest {
-        @NotNull(message = "patientId gerekli")
-        public Long patientId;
+    @GetMapping("/by-patient/{tc}")
+    public List<Appointment> getByPatient(@PathVariable String tc) {
+        return appointmentService.getAppointmentsByPatientTc(tc);
     }
 
+    @GetMapping("/history/{tc}")
+    public ResponseEntity<PatientHistoryResponse> getPatientHistory(@PathVariable String tc) {
+        try {
+            return ResponseEntity.ok(appointmentService.getPatientHistory(tc));
+        } catch (Exception e) {
+            return ResponseEntity.notFound().build();
+        }
+    }
+
+    @GetMapping("/dashboard")
+    public DashboardStats getDashboard() {
+        return appointmentService.getDashboardStats();
+    }
+
+    @GetMapping("/waiting-room")
+    public WaitingRoomDisplay getWaitingRoom() {
+        return appointmentService.getWaitingRoomDisplay();
+    }
+
+    @GetMapping("/mobile/queue/{tc}")
+    public AppointmentService.MobileQueueStatus getMobileQueue(@PathVariable String tc) {
+        return appointmentService.getMobileQueueStatus(tc);
+    }
 }

@@ -4,11 +4,10 @@ import com.acil.er_backend.dto.ApiResponse;
 import com.acil.er_backend.model.Patient;
 import com.acil.er_backend.service.PatientService;
 import jakarta.validation.Valid;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-
 import java.util.List;
-import java.util.Map;
 
 @RestController
 @RequestMapping("/api/patients")
@@ -20,67 +19,50 @@ public class PatientController {
         this.patientService = patientService;
     }
 
-    // 1) Yeni hasta (name, tc, basicSymptomsCsv opsiyonel)
-    @PostMapping
-    public ResponseEntity<ApiResponse<Patient>> createPatient(@RequestBody @Valid Patient patient) {
-        if (patient.getTc() == null || patient.getTc().length() != 11) {
-            return ResponseEntity.badRequest()
-                    .body(ApiResponse.error("TC 11 haneli olmalı."));
-        }
-        if (patientService.existsByTc(patient.getTc())) {
-            return ResponseEntity.badRequest()
-                    .body(ApiResponse.error("Bu TC ile kayıtlı hasta zaten var."));
-        }
-        Patient savedPatient = patientService.savePatient(patient);
-        return ResponseEntity.ok(ApiResponse.success("Hasta başarıyla oluşturuldu.", savedPatient));
-    }
-
-    // 2) Tüm hastalar
     @GetMapping
-    public ResponseEntity<ApiResponse<List<Patient>>> getAllPatients() {
-        return ResponseEntity.ok(ApiResponse.success(patientService.getAllPatients()));
+    public List<Patient> getAll() {
+        return patientService.getAllPatients();
     }
 
-    // 3) ID ile hasta
-    @GetMapping("/{id}")
-    public ResponseEntity<ApiResponse<Patient>> getPatientById(@PathVariable Long id) {
-        Patient patient = patientService.getPatientById(id);
-        if (patient == null) {
+    @GetMapping("/{tc}")
+    public ResponseEntity<Patient> getByTc(@PathVariable String tc) {
+        return patientService.getPatientByTc(tc)
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
+    }
+
+    @PostMapping
+    public ResponseEntity<ApiResponse<Patient>> create(@Valid @RequestBody Patient patient) {
+        if (patientService.existsByTc(patient.getTc())) {
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(ApiResponse.error("Bu TC ile kayıtlı hasta zaten mevcut."));
+        }
+        Patient saved = patientService.savePatient(patient);
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.success("Hasta kaydedildi.", saved));
+    }
+
+    @PutMapping("/{tc}")
+    public ResponseEntity<Patient> update(@PathVariable String tc, @Valid @RequestBody Patient patient) {
+        try {
+            return ResponseEntity.ok(patientService.updatePatient(tc, patient));
+        } catch (Exception e) {
             return ResponseEntity.notFound().build();
         }
-        return ResponseEntity.ok(ApiResponse.success(patient));
     }
 
-    // 4) Hasta sil
-    @DeleteMapping("/{id}")
-    public ResponseEntity<ApiResponse<Void>> deletePatient(@PathVariable Long id) {
-        patientService.deletePatient(id);
-        return ResponseEntity.ok(ApiResponse.success("Hasta başarıyla silindi.", null));
-    }
-
-    // 5) PUT tam güncelleme (name, tc, basicSymptomsCsv)
-    @PutMapping("/{id}")
-    public ResponseEntity<ApiResponse<Patient>> updatePatient(
-            @PathVariable Long id, 
-            @RequestBody @Valid Patient updatedPatient) {
+    @PatchMapping("/{tc}")
+    public ResponseEntity<Patient> partialUpdate(@PathVariable String tc, @RequestBody Patient patient) {
         try {
-            Patient updated = patientService.updatePatient(id, updatedPatient);
-            return ResponseEntity.ok(ApiResponse.success("Hasta başarıyla güncellendi.", updated));
-        } catch (RuntimeException e) {
-            return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage()));
+            return ResponseEntity.ok(patientService.partialUpdatePatient(tc, patient));
+        } catch (Exception e) {
+            return ResponseEntity.notFound().build();
         }
     }
 
-    // 6) PATCH kısmi güncelleme
-    @PatchMapping("/{id}")
-    public ResponseEntity<ApiResponse<Patient>> partialUpdatePatient(
-            @PathVariable Long id, 
-            @RequestBody Patient partialPatient) {
-        try {
-            Patient updated = patientService.partialUpdatePatient(id, partialPatient);
-            return ResponseEntity.ok(ApiResponse.success("Hasta başarıyla güncellendi.", updated));
-        } catch (RuntimeException e) {
-            return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage()));
-        }
+    @DeleteMapping("/{tc}")
+    public ResponseEntity<Void> delete(@PathVariable String tc) {
+        patientService.deletePatient(tc);
+        return ResponseEntity.noContent().build();
     }
 }

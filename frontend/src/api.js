@@ -1,100 +1,58 @@
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8080";
+const BASE = 'http://localhost:8080/api';
 
-export function authHeader(auth) {
-    if (!auth || !auth.username || !auth.password) {
-        return {};
-    }
-    const token = btoa(`${auth.username}:${auth.password}`);
-    return { Authorization: `Basic ${token}` };
-}
+export const encodeCredentials = (username, password) => btoa(`${username}:${password}`);
+export const decodeCredentials = (encoded) => {
+    try {
+        const decoded = atob(encoded);
+        const [username, password] = decoded.split(':');
+        return { username, password };
+    } catch { return null; }
+};
 
-async function handleResponse(res) {
-    const contentType = res.headers.get("content-type");
-    if (!contentType || !contentType.includes("application/json")) {
-        throw new Error(`Beklenmeyen yanıt formatı: ${res.status} ${res.statusText}`);
-    }
+const authHeader = () => {
+    const token = localStorage.getItem('auth');
+    return token ? { Authorization: `Basic ${token}` } : {};
+};
 
-    const data = await res.json();
-    
-    // ApiResponse formatını kontrol et
-    if (data.success !== undefined) {
-        if (!data.success) {
-            const error = new Error(data.message || "Bir hata oluştu");
-            error.data = data;
-            error.status = res.status;
-            throw error;
-        }
-        return data.data !== undefined ? data.data : data;
+const handleResponse = async (res) => {
+    if (res.status === 401) {
+        localStorage.removeItem('auth');
+        localStorage.removeItem('role');
+        window.location.href = '/login';
+        throw new Error('Oturum süresi doldu');
     }
-    
-    // Eski format (backward compatibility)
     if (!res.ok) {
-        const error = new Error(data.message || data.error || res.statusText);
-        error.data = data;
-        error.status = res.status;
-        throw error;
+        const error = await res.json().catch(() => ({ message: 'İstek başarısız' }));
+        throw new Error(error.message || 'İstek başarısız');
     }
-    
-    return data;
-}
+    return res.json();
+};
 
-export async function apiGet(path, auth) {
-    try {
-        const res = await fetch(`${BASE_URL}${path}`, {
-            headers: { ...authHeader(auth) },
-        });
-        return await handleResponse(res);
-    } catch (error) {
-        console.error(`API GET hatası [${path}]:`, error);
-        throw error;
-    }
-}
+export const apiGet = (path) =>
+    fetch(`${BASE}${path}`, { headers: authHeader() }).then(handleResponse);
 
-export async function apiPost(path, body, auth) {
-    try {
-        const res = await fetch(`${BASE_URL}${path}`, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                ...authHeader(auth),
-            },
-            body: JSON.stringify(body),
-        });
-        return await handleResponse(res);
-    } catch (error) {
-        console.error(`API POST hatası [${path}]:`, error);
-        throw error;
-    }
-}
+export const apiPost = (path, body) =>
+    fetch(`${BASE}${path}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeader() },
+        body: JSON.stringify(body)
+    }).then(handleResponse);
 
-export async function apiPatch(path, auth, body = null) {
-    try {
-        const headers = { ...authHeader(auth) };
-        if (body) {
-            headers["Content-Type"] = "application/json";
-        }
-        
-        const res = await fetch(`${BASE_URL}${path}`, {
-            method: "PATCH",
-            headers,
-            body: body ? JSON.stringify(body) : undefined,
-        });
-        return await handleResponse(res);
-    } catch (error) {
-        console.error(`API PATCH hatası [${path}]:`, error);
-        throw error;
-    }
-}
+export const apiPatch = (path, body) =>
+    fetch(`${BASE}${path}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', ...authHeader() },
+        body: JSON.stringify(body)
+    }).then(handleResponse);
 
-export async function apiDelete(path, auth) {
-    try {
-        const res = await fetch(`${BASE_URL}${path}`, {
-            method: "DELETE",
-            headers: { ...authHeader(auth) },
-        });
-        return await handleResponse(res);
-    } catch (error) {
-        console.error(`API DELETE hatası [${path}]:`, error);
-        throw error;
-    }
-}
+export const apiDelete = (path) =>
+    fetch(`${BASE}${path}`, { method: 'DELETE', headers: authHeader() }).then(handleResponse);
+
+export const validateCredentials = async (username, password) => {
+    const encoded = encodeCredentials(username, password);
+    const res = await fetch(`${BASE}/auth/me`, {
+        headers: { Authorization: `Basic ${encoded}` }
+    });
+    if (!res.ok) throw new Error('Geçersiz kullanıcı adı veya şifre');
+    return res.json();
+};

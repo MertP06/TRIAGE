@@ -1,54 +1,51 @@
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useContext, useState, useEffect } from 'react';
+import { encodeCredentials, validateCredentials } from '../api';
 
 const AuthContext = createContext(null);
 
-export function AuthProvider({ children }) {
-    const [user, setUser] = useState(null); // null = henüz yüklenmedi, false = kullanıcı yok
+export const AuthProvider = ({ children }) => {
+    const [user, setUser] = useState(null);
+    const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState(null);
 
     useEffect(() => {
-        const loadUser = () => {
-            const raw = localStorage.getItem("er_user");
-            if (!raw) {
-                setUser(false); // hiç giriş yapılmamış
-                return;
-            }
-
-            try {
-                const parsed = JSON.parse(raw);
-                if (parsed?.username && parsed?.password && parsed?.role) {
-                    setUser(parsed); // geçerli kullanıcı bulundu
-                } else {
-                    setUser(false); // veri eksik veya bozuk
-                }
-            } catch {
-                setUser(false); // JSON parse hatası
-            }
-        };
-
-        loadUser();
+        const stored = localStorage.getItem('auth');
+        const role = localStorage.getItem('role');
+        if (stored && role) {
+            setUser({ role });
+        }
+        setIsLoading(false);
     }, []);
 
-    // Giriş fonksiyonu
-    const login = ({ username, password }) => {
-        const role = username.toLowerCase() === "doctor" ? "DOCTOR" : "NURSE";
-        const u = { username, password, role };
-        setUser(u);
-        localStorage.setItem("er_user", JSON.stringify(u));
+    const login = async (username, password) => {
+        setError(null);
+        setIsLoading(true);
+        try {
+            const data = await validateCredentials(username, password);
+            const encoded = encodeCredentials(username, password);
+            localStorage.setItem('auth', encoded);
+            localStorage.setItem('role', data.role);
+            setUser({ role: data.role, username: data.username });
+            return true;
+        } catch (err) {
+            setError(err.message);
+            return false;
+        } finally {
+            setIsLoading(false);
+        }
     };
 
-    // Çıkış fonksiyonu
     const logout = () => {
-        setUser(false);
-        localStorage.removeItem("er_user");
+        localStorage.removeItem('auth');
+        localStorage.removeItem('role');
+        setUser(null);
     };
 
-    const value = useMemo(() => ({ user, login, logout }), [user]);
-    return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
-}
+    return (
+        <AuthContext.Provider value={{ user, login, logout, isLoading, error }}>
+            {children}
+        </AuthContext.Provider>
+    );
+};
 
-// Hook olarak kullanılabilir
-export function useAuth() {
-    const ctx = useContext(AuthContext);
-    if (!ctx) throw new Error("useAuth must be used within AuthProvider");
-    return ctx;
-}
+export const useAuth = () => useContext(AuthContext);

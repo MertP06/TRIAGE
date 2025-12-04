@@ -2,40 +2,65 @@ package com.acil.er_backend.dto;
 
 import jakarta.validation.constraints.*;
 
-/**
- * Hemşirenin triage oluştururken girdiği bilgiler.
- * @Valid desteği ile Controller'da otomatik doğrulama yapılır.
- */
 public class CreateTriageRequest {
 
     @NotNull(message = "appointmentId boş olamaz.")
-    public Long appointmentId;
+    private Long appointmentId;
 
-    @NotBlank(message = "Semptom listesi (nurseSymptomsCsv) boş olamaz.")
-    public String nurseSymptomsCsv;
+    @NotBlank(message = "Semptom listesi boş olamaz.")
+    private String nurseSymptomsCsv;
 
-    @DecimalMin(value = "30.0", message = "Ateş en az 30°C olmalı.")
-    @DecimalMax(value = "45.0", message = "Ateş en fazla 45°C olmalı.")
-    public Double temperature;
+    @DecimalMin(value = "30.0") @DecimalMax(value = "45.0")
+    private Double temperature;
 
-    @Min(value = 20, message = "Nabız en az 20 olmalı.")
-    @Max(value = 240, message = "Nabız en fazla 240 olmalı.")
-    public Integer pulse;
+    @Min(20) @Max(240)
+    private Integer pulse;
 
-    @Min(value = 50, message = "Büyük tansiyon (bpHigh) en az 50 olmalı.")
-    @Max(value = 260, message = "Büyük tansiyon (bpHigh) en fazla 260 olmalı.")
-    public Integer bpHigh;
+    @Min(50) @Max(260)
+    private Integer bpHigh;
 
-    @Min(value = 30, message = "Küçük tansiyon (bpLow) en az 30 olmalı.")
-    @Max(value = 200, message = "Küçük tansiyon (bpLow) en fazla 200 olmalı.")
-    public Integer bpLow;
+    @Min(30) @Max(200)
+    private Integer bpLow;
 
-    @DecimalMin(value = "0.0", message = "Ağrı seviyesi 0'dan küçük olamaz.")
-    @DecimalMax(value = "10.0", message = "Ağrı seviyesi 10'dan büyük olamaz.")
-    public Double painLevel;
+    @Min(50) @Max(100)
+    private Integer oxygenSaturation;
 
-    @NotBlank(message = "Triage seviyesi (triageLevel) boş olamaz.")
-    public String triageLevel;
+    @Min(5) @Max(60)
+    private Integer respiratoryRate;
 
-    public String notes;
+    @Min(0) @Max(10)
+    private Integer painLevel;
+
+    @Min(20) @Max(600)
+    private Integer bloodGlucose;
+
+    @NotBlank(message = "Triage seviyesi boş olamaz.")
+    private String triageLevel;
+
+    private String notes;
+
+    public Long getAppointmentId() { return appointmentId; }
+    public void setAppointmentId(Long appointmentId) { this.appointmentId = appointmentId; }
+    public String getNurseSymptomsCsv() { return nurseSymptomsCsv; }
+    public void setNurseSymptomsCsv(String nurseSymptomsCsv) { this.nurseSymptomsCsv = nurseSymptomsCsv; }
+    public Double getTemperature() { return temperature; }
+    public void setTemperature(Double temperature) { this.temperature = temperature; }
+    public Integer getPulse() { return pulse; }
+    public void setPulse(Integer pulse) { this.pulse = pulse; }
+    public Integer getBpHigh() { return bpHigh; }
+    public void setBpHigh(Integer bpHigh) { this.bpHigh = bpHigh; }
+    public Integer getBpLow() { return bpLow; }
+    public void setBpLow(Integer bpLow) { this.bpLow = bpLow; }
+    public Integer getOxygenSaturation() { return oxygenSaturation; }
+    public void setOxygenSaturation(Integer oxygenSaturation) { this.oxygenSaturation = oxygenSaturation; }
+    public Integer getRespiratoryRate() { return respiratoryRate; }
+    public void setRespiratoryRate(Integer respiratoryRate) { this.respiratoryRate = respiratoryRate; }
+    public Integer getPainLevel() { return painLevel; }
+    public void setPainLevel(Integer painLevel) { this.painLevel = painLevel; }
+    public Integer getBloodGlucose() { return bloodGlucose; }
+    public void setBloodGlucose(Integer bloodGlucose) { this.bloodGlucose = bloodGlucose; }
+    public String getTriageLevel() { return triageLevel; }
+    public void setTriageLevel(String triageLevel) { this.triageLevel = triageLevel; }
+    public String getNotes() { return notes; }
+    public void setNotes(String notes) { this.notes = notes; }
 }

@@ -1,9 +1,15 @@
-import { Navigate } from "react-router-dom";
-import { useAuth } from "../auth/AuthContext";
+import { Navigate } from 'react-router-dom';
+import { useAuth } from '../auth/AuthContext';
 
-export default function ProtectedRoute({ children, allow = ["NURSE", "DOCTOR"] }) {
-    const { user } = useAuth();
+const ProtectedRoute = ({ children, allowedRoles }) => {
+    const { user, isLoading } = useAuth();
+    
+    if (isLoading) return <div className="loading">Yükleniyor...</div>;
     if (!user) return <Navigate to="/login" replace />;
-    if (!allow.includes(user.role)) return <Navigate to="/" replace />;
+    if (allowedRoles && !allowedRoles.includes(user.role)) {
+        return <Navigate to="/" replace />;
+    }
     return children;
-}
+};
+
+export default ProtectedRoute;

@@ -1,71 +1,72 @@
 package com.acil.er_backend.model;
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
-
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.List;
+import java.time.temporal.ChronoUnit;
 
 @Entity
-@Table(name = "appointments", indexes = {
-        @Index(name = "idx_appointments_appointment_date", columnList = "appointmentDate")
-})
+@Table(name = "appointments")
 public class Appointment {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @ManyToOne(fetch = FetchType.EAGER, optional = false)
-    @JoinColumn(name = "patient_id")
-    @JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
+    @ManyToOne(fetch = FetchType.EAGER)
+    @JoinColumn(name = "patient_tc", referencedColumnName = "tc")
     private Patient patient;
 
-    @Column(nullable = false)
     private Integer queueNumber;
-
-    @Column(nullable = false)
-    private LocalDate appointmentDate = LocalDate.now();
+    private LocalDate appointmentDate;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
     private AppointmentStatus status = AppointmentStatus.WAITING;
 
-    private LocalDateTime createdAt = LocalDateTime.now();
+    private String chiefComplaint;
+    private Integer urgencySelfAssessment;
+    private Integer estimatedWaitMinutes;
 
-    // Randevu silinince bağlı kayıtlar da gitsin; JSON'a bu listeleri koymuyoruz
-    @OneToMany(mappedBy = "appointment", cascade = CascadeType.ALL, orphanRemoval = true)
-    @JsonIgnore
-    private List<TriageRecord> triageRecords;
+    private LocalDateTime createdAt;
+    private LocalDateTime calledAt;
+    private LocalDateTime startedAt;
+    private LocalDateTime completedAt;
 
-    @OneToMany(mappedBy = "appointment", cascade = CascadeType.ALL, orphanRemoval = true)
-    @JsonIgnore
-    private List<DoctorNote> doctorNotes;
+    @PrePersist
+    protected void onCreate() {
+        createdAt = LocalDateTime.now();
+        appointmentDate = LocalDate.now();
+    }
 
-    // --- Getter / Setter ---
+    public Long getActualWaitMinutes() {
+        if (calledAt != null && createdAt != null) {
+            return ChronoUnit.MINUTES.between(createdAt, calledAt);
+        }
+        return null;
+    }
+
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
-
     public Patient getPatient() { return patient; }
     public void setPatient(Patient patient) { this.patient = patient; }
-
     public Integer getQueueNumber() { return queueNumber; }
     public void setQueueNumber(Integer queueNumber) { this.queueNumber = queueNumber; }
-
     public LocalDate getAppointmentDate() { return appointmentDate; }
     public void setAppointmentDate(LocalDate appointmentDate) { this.appointmentDate = appointmentDate; }
-
     public AppointmentStatus getStatus() { return status; }
     public void setStatus(AppointmentStatus status) { this.status = status; }
-
+    public String getChiefComplaint() { return chiefComplaint; }
+    public void setChiefComplaint(String chiefComplaint) { this.chiefComplaint = chiefComplaint; }
+    public Integer getUrgencySelfAssessment() { return urgencySelfAssessment; }
+    public void setUrgencySelfAssessment(Integer urgencySelfAssessment) { this.urgencySelfAssessment = urgencySelfAssessment; }
+    public Integer getEstimatedWaitMinutes() { return estimatedWaitMinutes; }
+    public void setEstimatedWaitMinutes(Integer estimatedWaitMinutes) { this.estimatedWaitMinutes = estimatedWaitMinutes; }
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
-
-    public List<TriageRecord> getTriageRecords() { return triageRecords; }
-    public void setTriageRecords(List<TriageRecord> triageRecords) { this.triageRecords = triageRecords; }
-
-    public List<DoctorNote> getDoctorNotes() { return doctorNotes; }
-    public void setDoctorNotes(List<DoctorNote> doctorNotes) { this.doctorNotes = doctorNotes; }
+    public LocalDateTime getCalledAt() { return calledAt; }
+    public void setCalledAt(LocalDateTime calledAt) { this.calledAt = calledAt; }
+    public LocalDateTime getStartedAt() { return startedAt; }
+    public void setStartedAt(LocalDateTime startedAt) { this.startedAt = startedAt; }
+    public LocalDateTime getCompletedAt() { return completedAt; }
+    public void setCompletedAt(LocalDateTime completedAt) { this.completedAt = completedAt; }
 }

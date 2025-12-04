@@ -3,8 +3,8 @@ package com.acil.er_backend.service;
 import com.acil.er_backend.model.Patient;
 import com.acil.er_backend.repository.PatientRepository;
 import org.springframework.stereotype.Service;
-
 import java.util.List;
+import java.util.NoSuchElementException;
 import java.util.Optional;
 
 @Service
@@ -27,14 +27,13 @@ public class PatientServiceImpl implements PatientService {
     }
 
     @Override
-    public Patient getPatientById(Long id) {
-        Optional<Patient> optional = patientRepository.findById(id);
-        return optional.orElse(null);
+    public Optional<Patient> getPatientByTc(String tc) {
+        return patientRepository.findByTc(tc);
     }
 
     @Override
-    public void deletePatient(Long id) {
-        patientRepository.deleteById(id);
+    public void deletePatient(String tc) {
+        patientRepository.deleteById(tc);
     }
 
     @Override
@@ -42,29 +41,23 @@ public class PatientServiceImpl implements PatientService {
         return patientRepository.existsByTc(tc);
     }
 
-    // PUT: Tüm alanları güncelle (name, tc, basicSymptomsCsv)
     @Override
-    public Patient updatePatient(Long id, Patient updated) {
-        Patient existing = patientRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Hasta bulunamadı: " + id));
-
+    public Patient updatePatient(String tc, Patient updated) {
+        Patient existing = patientRepository.findByTc(tc)
+                .orElseThrow(() -> new NoSuchElementException("Hasta bulunamadı: " + tc));
         existing.setName(updated.getName());
-        existing.setTc(updated.getTc());
-        existing.setBasicSymptomsCsv(updated.getBasicSymptomsCsv());
-
+        if (updated.getBirthYear() != null) existing.setBirthYear(updated.getBirthYear());
+        if (updated.getGender() != null) existing.setGender(updated.getGender());
         return patientRepository.save(existing);
     }
 
-    // PATCH: Sadece gelen alanları güncelle
     @Override
-    public Patient partialUpdatePatient(Long id, Patient patch) {
-        Patient existing = patientRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Hasta bulunamadı: " + id));
-
+    public Patient partialUpdatePatient(String tc, Patient patch) {
+        Patient existing = patientRepository.findByTc(tc)
+                .orElseThrow(() -> new NoSuchElementException("Hasta bulunamadı: " + tc));
         if (patch.getName() != null) existing.setName(patch.getName());
-        if (patch.getTc() != null) existing.setTc(patch.getTc());
-        if (patch.getBasicSymptomsCsv() != null) existing.setBasicSymptomsCsv(patch.getBasicSymptomsCsv());
-
+        if (patch.getBirthYear() != null) existing.setBirthYear(patch.getBirthYear());
+        if (patch.getGender() != null) existing.setGender(patch.getGender());
         return patientRepository.save(existing);
     }
 }

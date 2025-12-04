@@ -1,76 +1,52 @@
 package com.acil.er_backend.config;
 
+import com.acil.er_backend.service.CustomUserDetailsService;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
-import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
-import org.springframework.security.core.userdetails.User;
-import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.security.provisioning.InMemoryUserDetailsManager;
 import org.springframework.security.web.SecurityFilterChain;
 
 @Configuration
+@EnableWebSecurity
 public class SecurityConfig {
 
-    @Bean
-    public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
-        http
-                .csrf(csrf -> csrf.disable())
-                .cors(Customizer.withDefaults())
-                .authorizeHttpRequests(auth -> auth
-                        // CORS preflight
-                        .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                        // Sağlık/metrikler
-                        .requestMatchers("/actuator/**").permitAll()
+    private final CustomUserDetailsService userDetailsService;
 
-                        // --- HASTA/MOBİL AÇIK UÇLAR ---
-                        .requestMatchers(HttpMethod.POST, "/api/patients").permitAll()
-                        .requestMatchers(HttpMethod.POST, "/api/appointments").permitAll()
-                        .requestMatchers(HttpMethod.GET,  "/api/appointments/status/**").permitAll()
-                        .requestMatchers(HttpMethod.GET,  "/api/medical/**").permitAll()
-
-                        // --- PERSONEL YETKİLİ UÇLAR ---
-                        .requestMatchers("/api/triage/**").hasRole("NURSE")
-                        .requestMatchers("/api/doctor-notes/**").hasRole("DOCTOR")
-
-                        // Randevu diğer işlemleri (listeleme, durum değişikliği, silme) personel
-                        .requestMatchers("/api/appointments/**").hasAnyRole("NURSE","DOCTOR")
-                        // Hastaların diğer uçları (listeleme/silme/güncelleme) personel
-                        .requestMatchers("/api/patients/**").hasAnyRole("NURSE","DOCTOR")
-
-                        // Dev yardımcı uçları kapalı (istersen değiştir)
-                        .requestMatchers("/api/dev/**").hasAnyRole("NURSE","DOCTOR")
-
-                        // kalan her şey auth ister
-                        .anyRequest().authenticated()
-                )
-                .httpBasic(Customizer.withDefaults());
-
-        return http.build();
-    }
-
-    @Bean
-    public UserDetailsService users(PasswordEncoder passwordEncoder) {
-        // BCrypt ile hashlenmiş şifreler: "nurse123" ve "doctor123"
-        // Not: Bu hash'ler BCryptPasswordEncoder ile oluşturulmuştur
-        var nurse  = User.builder()
-                .username("nurse")
-                .password(passwordEncoder.encode("nurse123"))
-                .roles("NURSE")
-                .build();
-        var doctor = User.builder()
-                .username("doctor")
-                .password(passwordEncoder.encode("doctor123"))
-                .roles("DOCTOR")
-                .build();
-        return new InMemoryUserDetailsManager(nurse, doctor);
+    public SecurityConfig(CustomUserDetailsService userDetailsService) {
+        this.userDetailsService = userDetailsService;
     }
 
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
+    }
+
+    @Bean
+    public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+        http
+            .csrf(csrf -> csrf.disable())
+            .cors(cors -> {})
+            .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+            .authorizeHttpRequests(auth -> auth
+                .requestMatchers("/actuator/**").permitAll()
+                .requestMatchers("/api/auth/**").permitAll()
+                .requestMatchers(HttpMethod.POST, "/api/patients").permitAll()
+                .requestMatchers(HttpMethod.POST, "/api/appointments").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/appointments/mobile/queue/**").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/appointments/waiting-room").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/medical/**").permitAll()
+                .requestMatchers("/api/triage/**").hasRole("NURSE")
+                .requestMatchers("/api/doctor-notes/**").hasRole("DOCTOR")
+                .anyRequest().authenticated()
+            )
+            .userDetailsService(userDetailsService)
+            .httpBasic(basic -> {});
+
+        return http.build();
     }
 }

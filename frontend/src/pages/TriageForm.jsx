@@ -1,220 +1,229 @@
-import { useEffect, useMemo, useState } from "react";
-import { useAuth } from "../auth/AuthContext";
-import { apiGet, apiPost } from "../api";
-import ProtectedRoute from "../components/ProtectedRoute";
+import { useState, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { apiGet, apiPost } from '../api';
 
-function Badge({ tone = "gray", children }) {
-    return <span className={`badge ${tone}`}>{children}</span>;
-}
-
-function SectionTitle({ title, subtitle }) {
-    return (
-        <div className="section-title">
-            <h2>{title}</h2>
-            {subtitle && <p className="hint">{subtitle}</p>}
-        </div>
-    );
-}
-
-function Pill({ active, onClick, children }) {
-    return (
-        <button type="button" className={`chip ${active ? "on" : ""}`} onClick={onClick}>
-            {children}
-        </button>
-    );
-}
-
-function TriageFormInner() {
-    const { user } = useAuth();
-
+const TriageForm = () => {
+    const { appointmentId } = useParams();
+    const navigate = useNavigate();
+    const [appointment, setAppointment] = useState(null);
     const [symptoms, setSymptoms] = useState([]);
-    const [q, setQ] = useState("");
-    const [selected, setSelected] = useState([]);
+    const [allSymptoms, setAllSymptoms] = useState([]);
+    const [searchTerm, setSearchTerm] = useState('');
+    const [loading, setLoading] = useState(true);
+    const [submitting, setSubmitting] = useState(false);
 
     const [form, setForm] = useState({
-        appointmentId: "",
-        temperature: "",
-        pulse: "",
-        bpHigh: "",
-        bpLow: "",
-        painLevel: "",
-        triageLevel: "SARI",
-        notes: "",
+        temperature: '',
+        pulse: '',
+        bpHigh: '',
+        bpLow: '',
+        oxygenSaturation: '',
+        respiratoryRate: '',
+        painLevel: '',
+        bloodGlucose: '',
+        triageLevel: 'YESIL',
+        notes: ''
     });
 
-    const [result, setResult] = useState(null);
-    const onChange = (k, v) => setForm((s) => ({ ...s, [k]: v }));
-
     useEffect(() => {
-        (async () => {
-            const data = await apiGet("/api/medical/symptoms", user);
-            setSymptoms(Array.isArray(data) ? data : []);
-        })().catch(console.error);
-    }, [user]);
+        const fetchData = async () => {
+            try {
+                const [detail, syms] = await Promise.all([
+                    apiGet(`/appointments/${appointmentId}/detail`),
+                    apiGet('/medical/symptoms')
+                ]);
+                setAppointment(detail);
+                setAllSymptoms(Array.isArray(syms) ? syms : Object.values(syms));
+            } catch (err) {
+                console.error('Veriler yüklenemedi:', err);
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchData();
+    }, [appointmentId]);
 
-    const filtered = useMemo(() => {
-        const qq = q.trim().toLowerCase();
-        return !qq ? symptoms : symptoms.filter((s) => s.toLowerCase().includes(qq));
-    }, [symptoms, q]);
+    const handleChange = (e) => {
+        setForm({ ...form, [e.target.name]: e.target.value });
+    };
 
-    const toggle = (sym) =>
-        setSelected((prev) => (prev.includes(sym) ? prev.filter((x) => x !== sym) : [...prev, sym]));
+    const addSymptom = (symptom) => {
+        if (!symptoms.includes(symptom)) {
+            setSymptoms([...symptoms, symptom]);
+        }
+        setSearchTerm('');
+    };
 
-    const submit = async (e) => {
+    const removeSymptom = (symptom) => {
+        setSymptoms(symptoms.filter(s => s !== symptom));
+    };
+
+    const filteredSymptoms = allSymptoms
+        .filter(s => s.toLowerCase().includes(searchTerm.toLowerCase()))
+        .slice(0, 10);
+
+    const handleSubmit = async (e) => {
         e.preventDefault();
-        if (selected.length === 0) {
-            alert("En az bir semptom seçmelisiniz.");
+        if (symptoms.length === 0) {
+            alert('En az bir semptom seçmelisiniz');
             return;
         }
-
-        const payload = {
-            appointmentId: Number(form.appointmentId || 0),
-            nurseSymptomsCsv: selected.join(", "),
-            temperature: form.temperature ? Number(form.temperature) : null,
-            pulse: form.pulse ? Number(form.pulse) : null,
-            bpHigh: form.bpHigh ? Number(form.bpHigh) : null,
-            bpLow: form.bpLow ? Number(form.bpLow) : null,
-            painLevel: form.painLevel ? Number(form.painLevel) : null,
-            triageLevel: form.triageLevel || "SARI",
-            notes: form.notes || null,
-        };
-
+        setSubmitting(true);
         try {
-            const data = await apiPost("/api/triage", payload, user);
-            setResult(data);
-            setSelected([]);
-            setForm({
-                appointmentId: "",
-                temperature: "",
-                pulse: "",
-                bpHigh: "",
-                bpLow: "",
-                painLevel: "",
-                triageLevel: "SARI",
-                notes: "",
+            await apiPost('/triage', {
+                appointmentId: parseInt(appointmentId),
+                nurseSymptomsCsv: symptoms.join(','),
+                temperature: form.temperature ? parseFloat(form.temperature) : null,
+                pulse: form.pulse ? parseInt(form.pulse) : null,
+                bpHigh: form.bpHigh ? parseInt(form.bpHigh) : null,
+                bpLow: form.bpLow ? parseInt(form.bpLow) : null,
+                oxygenSaturation: form.oxygenSaturation ? parseInt(form.oxygenSaturation) : null,
+                respiratoryRate: form.respiratoryRate ? parseInt(form.respiratoryRate) : null,
+                painLevel: form.painLevel ? parseInt(form.painLevel) : null,
+                bloodGlucose: form.bloodGlucose ? parseInt(form.bloodGlucose) : null,
+                triageLevel: form.triageLevel,
+                notes: form.notes
             });
-            window.scrollTo({ top: 0, behavior: "smooth" });
+            alert('Triaj kaydedildi!');
+            navigate('/appointments');
         } catch (err) {
-            console.error("Triage kaydı başarısız:", err);
-            const message = err.message || "Triage kaydı yapılamadı. Lütfen randevu ID ve giriş bilgilerini kontrol edin.";
-            alert(message);
+            alert('Hata: ' + err.message);
+        } finally {
+            setSubmitting(false);
         }
     };
 
+    if (loading) return <div className="loading">Yükleniyor...</div>;
+
     return (
-        <div className="container">
-            <div className="page-head">
-                <div>
-                    <div className="brand">🩺 Triage</div>
-                    <span className="hint">Semptomları seç, yaşamsal bulguları gir, seviyeyi belirle.</span>
-                </div>
-                <Badge tone="gray">Rol: NURSE</Badge>
-            </div>
-
-            <div className="card group">
-                <SectionTitle title="Randevu & Seviye" />
-                <div className="row">
-                    <input
-                        className="input"
-                        placeholder="Randevu ID"
-                        value={form.appointmentId}
-                        onChange={(e) => onChange("appointmentId", e.target.value)}
-                        required
-                    />
-                    <select
-                        className="select"
-                        value={form.triageLevel}
-                        onChange={(e) => onChange("triageLevel", e.target.value)}
-                    >
-                        <option value="YESIL">YEŞİL</option>
-                        <option value="SARI">SARI</option>
-                        <option value="KIRMIZI">KIRMIZI</option>
-                    </select>
-                </div>
-            </div>
-
-            <div className="card group">
-                <SectionTitle
-                    title="Semptomlar"
-                    subtitle="Listeden seç; arama kutusuyla daraltabilirsin. Seçilenler aşağıda özetlenir."
-                />
-                <div className="row">
-                    <input className="input" placeholder="Semptom ara…" value={q} onChange={(e) => setQ(e.target.value)} />
-                    <div className="selected-info">
-                        <Badge tone="ok">{selected.length} seçili</Badge>
-                    </div>
-                </div>
-
-                <div className="symptom-grid">
-                    {filtered.map((s) => (
-                        <Pill key={s} active={selected.includes(s)} onClick={() => toggle(s)}>
-                            {s}
-                        </Pill>
-                    ))}
-                </div>
-
-                {selected.length > 0 && (
-                    <div className="selected-chips">
-                        {selected.map((s) => (
-                            <span key={s} className="chip on small" onClick={() => toggle(s)}>
-                                {s} ✕
-                            </span>
-                        ))}
+        <div className="form-page">
+            <div className="form-header">
+                <h1>📋 Triaj Formu</h1>
+                {appointment?.patient && (
+                    <div className="patient-banner">
+                        <span className="queue">#{appointment.appointment?.queueNumber}</span>
+                        <span className="name">{appointment.patient.name}</span>
+                        <span className="tc">TC: {appointment.patient.tc}</span>
                     </div>
                 )}
             </div>
 
-            <div className="card group">
-                <SectionTitle title="Yaşamsal Bulgular" />
-                <div className="row-3">
-                    <input className="input" placeholder="Ateş (°C)" value={form.temperature} onChange={(e) => onChange("temperature", e.target.value)} />
-                    <input className="input" placeholder="Nabız (bpm)" value={form.pulse} onChange={(e) => onChange("pulse", e.target.value)} />
-                    <input className="input" placeholder="Ağrı (0-10)" value={form.painLevel} onChange={(e) => onChange("painLevel", e.target.value)} />
-                </div>
-                <div className="row">
-                    <input className="input" placeholder="Büyük Tansiyon" value={form.bpHigh} onChange={(e) => onChange("bpHigh", e.target.value)} />
-                    <input className="input" placeholder="Küçük Tansiyon" value={form.bpLow} onChange={(e) => onChange("bpLow", e.target.value)} />
-                </div>
-                <textarea className="textarea" rows="3" placeholder="Notlar (opsiyonel)" value={form.notes} onChange={(e) => onChange("notes", e.target.value)} />
-                <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-                    <button className="btn btn-primary" onClick={submit}>Kaydet</button>
-                </div>
-            </div>
-
-            {result && (
-                <div className="card group">
-                    <SectionTitle title="Kayıt Oluşturuldu" />
-                    <div className="kv">
-                        <div><span className="kv-k">ID</span><span className="kv-v">{result.id}</span></div>
-                        <div><span className="kv-k">Ateş</span><span className="kv-v">{result.temperature ?? "-"}</span></div>
-                        <div><span className="kv-k">Nabız</span><span className="kv-v">{result.pulse ?? "-"}</span></div>
-                        <div><span className="kv-k">TA (B/K)</span><span className="kv-v">{result.bpHigh ?? "-"} / {result.bpLow ?? "-"}</span></div>
-                        <div><span className="kv-k">Seviye</span><span className={`kv-v tag ${String(result.triageLevel).toLowerCase()}`}>{result.triageLevel}</span></div>
+            <form onSubmit={handleSubmit} className="triage-form">
+                <div className="form-section">
+                    <h3>🩺 Vital Bulgular</h3>
+                    <div className="vitals-grid">
+                        <div className="form-group">
+                            <label>Ateş (°C)</label>
+                            <input type="number" name="temperature" value={form.temperature}
+                                onChange={handleChange} step="0.1" min="30" max="45" placeholder="36.5" />
+                        </div>
+                        <div className="form-group">
+                            <label>Nabız (bpm)</label>
+                            <input type="number" name="pulse" value={form.pulse}
+                                onChange={handleChange} min="20" max="240" placeholder="80" />
+                        </div>
+                        <div className="form-group">
+                            <label>Tansiyon (Sistolik)</label>
+                            <input type="number" name="bpHigh" value={form.bpHigh}
+                                onChange={handleChange} min="50" max="260" placeholder="120" />
+                        </div>
+                        <div className="form-group">
+                            <label>Tansiyon (Diastolik)</label>
+                            <input type="number" name="bpLow" value={form.bpLow}
+                                onChange={handleChange} min="30" max="200" placeholder="80" />
+                        </div>
+                        <div className="form-group">
+                            <label>SpO2 (%)</label>
+                            <input type="number" name="oxygenSaturation" value={form.oxygenSaturation}
+                                onChange={handleChange} min="50" max="100" placeholder="98" />
+                        </div>
+                        <div className="form-group">
+                            <label>Solunum Hızı</label>
+                            <input type="number" name="respiratoryRate" value={form.respiratoryRate}
+                                onChange={handleChange} min="5" max="60" placeholder="16" />
+                        </div>
+                        <div className="form-group">
+                            <label>Ağrı (0-10)</label>
+                            <input type="number" name="painLevel" value={form.painLevel}
+                                onChange={handleChange} min="0" max="10" placeholder="0" />
+                        </div>
+                        <div className="form-group">
+                            <label>Kan Şekeri</label>
+                            <input type="number" name="bloodGlucose" value={form.bloodGlucose}
+                                onChange={handleChange} min="20" max="600" placeholder="100" />
+                        </div>
                     </div>
-
-                    {result.suggestionsJson && (
-                        <>
-                            <h3 style={{ marginTop: 18 }}>Olası Hastalıklar</h3>
-                            <ul className="callouts">
-                                {JSON.parse(result.suggestionsJson).map((x, i) => (
-                                    <li key={i}>
-                                        <span className={`tag urg-${x.urgency_level}`}>Seviye {x.urgency_level}</span>
-                                        <span>{x.reasoning}</span>
-                                    </li>
-                                ))}
-                            </ul>
-                        </>
-                    )}
                 </div>
-            )}
+
+                <div className="form-section">
+                    <h3>🔍 Semptomlar</h3>
+                    <div className="symptom-search">
+                        <input
+                            type="text"
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            placeholder="Semptom ara..."
+                        />
+                        {searchTerm && filteredSymptoms.length > 0 && (
+                            <div className="symptom-dropdown">
+                                {filteredSymptoms.map(s => (
+                                    <div key={s} className="symptom-option" onClick={() => addSymptom(s)}>
+                                        {s}
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                    <div className="selected-symptoms">
+                        {symptoms.map(s => (
+                            <span key={s} className="symptom-tag">
+                                {s}
+                                <button type="button" onClick={() => removeSymptom(s)}>×</button>
+                            </span>
+                        ))}
+                    </div>
+                </div>
+
+                <div className="form-section">
+                    <h3>🚦 Triaj Seviyesi</h3>
+                    <div className="triage-levels">
+                        {['KIRMIZI', 'SARI', 'YESIL'].map(level => (
+                            <label key={level} className={`level-option ${level.toLowerCase()} ${form.triageLevel === level ? 'selected' : ''}`}>
+                                <input
+                                    type="radio"
+                                    name="triageLevel"
+                                    value={level}
+                                    checked={form.triageLevel === level}
+                                    onChange={handleChange}
+                                />
+                                <span>{level}</span>
+                            </label>
+                        ))}
+                    </div>
+                </div>
+
+                <div className="form-section">
+                    <h3>📝 Notlar</h3>
+                    <textarea
+                        name="notes"
+                        value={form.notes}
+                        onChange={handleChange}
+                        rows="3"
+                        placeholder="Ek notlar..."
+                    />
+                </div>
+
+                <div className="form-actions">
+                    <button type="button" onClick={() => navigate('/appointments')} className="btn-cancel">
+                        İptal
+                    </button>
+                    <button type="submit" className="btn-submit" disabled={submitting}>
+                        {submitting ? 'Kaydediliyor...' : 'Kaydet'}
+                    </button>
+                </div>
+            </form>
         </div>
     );
-}
+};
 
-export default function TriageForm() {
-    return (
-        <ProtectedRoute allow={["NURSE"]}>
-            <TriageFormInner />
-        </ProtectedRoute>
-    );
-}
+export default TriageForm;

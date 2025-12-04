@@ -1,77 +1,57 @@
 package com.acil.er_backend.service;
 
 import org.springframework.stereotype.Service;
-
 import java.util.*;
 import java.util.stream.Collectors;
 
-/**
- * Hemşirenin seçtiği semptomlara göre medical_data.json içinden
- * ilk 5 eşleşmeyi çıkarır ve SADECE {urgency_level, reasoning} döner.
- */
 @Service
 public class MedicalInferenceService {
 
-    private final MedicalDataService dataService;
+    private final MedicalDataService medicalDataService;
 
-    public MedicalInferenceService(MedicalDataService dataService) {
-        this.dataService = dataService;
+    public MedicalInferenceService(MedicalDataService medicalDataService) {
+        this.medicalDataService = medicalDataService;
     }
 
-    /**
-     * Sadece {urgency_level, reasoning} döner.
-     * Sıralama: önce eşleşen semptom sayısı (desc), eşitse urgency_level (desc).
-     */
-    public List<Map<String, Object>> suggestTop5(List<String> nurseSymptoms) {
-        if (nurseSymptoms == null || nurseSymptoms.isEmpty()) {
-            return List.of();
+    public List<Map<String, Object>> suggestTop5(List<String> symptoms) {
+        if (symptoms == null || symptoms.isEmpty()) return List.of();
+
+        List<Map<String, Object>> matches = medicalDataService.searchBySymptoms(symptoms);
+
+        List<Map<String, Object>> scored = new ArrayList<>();
+        for (Map<String, Object> rec : matches) {
+            Object symptomsObj = rec.get("symptoms");
+            int matchCount = 0;
+            if (symptomsObj instanceof List<?> list) {
+                for (Object s : list) {
+                    if (s != null) {
+                        String lower = s.toString().toLowerCase().trim();
+                        for (String input : symptoms) {
+                            if (lower.equals(input.toLowerCase().trim())) {
+                                matchCount++;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+            Map<String, Object> copy = new HashMap<>(rec);
+            copy.put("match_score", matchCount);
+            scored.add(copy);
         }
-        final List<String> symptomsLc = nurseSymptoms.stream()
-                .filter(Objects::nonNull)
-                .map(String::trim)
-                .filter(s -> !s.isBlank())
-                .map(String::toLowerCase)
-                .toList();
 
-        // Eşleşme + puanlama
-        List<Map<String, Object>> scored = dataService.getAllMedicalData().stream()
-                .map(item -> {
-                    @SuppressWarnings("unchecked")
-                    List<String> itemSymptoms = (List<String>) item.getOrDefault("symptoms", List.of());
-                    long matchCount = itemSymptoms.stream()
-                            .filter(Objects::nonNull)
-                            .map(String::toLowerCase)
-                            .filter(s -> symptomsLc.stream().anyMatch(x -> s.contains(x) || x.contains(s)))
-                            .count();
-                    if (matchCount == 0) return null;
-
-                    // İç sıralama için tutuyoruz (dışarı vermeyeceğiz)
-                    Map<String, Object> tmp = new HashMap<>();
-                    tmp.put("urgency_level", item.get("urgency_level"));
-                    tmp.put("reasoning", item.get("reasoning"));
-                    tmp.put("_matchScore", matchCount);
-                    return tmp;
-                })
-                .filter(Objects::nonNull)
-                .collect(Collectors.toList());
-
-        // Sıralama: matchScore DESC, sonra urgency_level DESC (5=çok acil > 1=acil)
-        scored.sort((a, b) -> {
-            long mB = ((Number) b.get("_matchScore")).longValue();
-            long mA = ((Number) a.get("_matchScore")).longValue();
-            if (mB != mA) return Long.compare(mB, mA);
-            int uB = ((Number) b.getOrDefault("urgency_level", 0)).intValue();
-            int uA = ((Number) a.getOrDefault("urgency_level", 0)).intValue();
-            return Integer.compare(uB, uA);
-        });
-
-        // İlk 5 + sadece istenen alanlar
         return scored.stream()
+                .sorted((a, b) -> {
+                    int scoreA = (int) a.getOrDefault("match_score", 0);
+                    int scoreB = (int) b.getOrDefault("match_score", 0);
+                    if (scoreB != scoreA) return scoreB - scoreA;
+                    Object uA = a.get("urgency_level");
+                    Object uB = b.get("urgency_level");
+                    int urgA = uA != null ? Integer.parseInt(uA.toString()) : 0;
+                    int urgB = uB != null ? Integer.parseInt(uB.toString()) : 0;
+                    return urgB - urgA;
+                })
                 .limit(5)
-                .map(m -> Map.of(
-                        "urgency_level", m.get("urgency_level"),
-                        "reasoning", m.get("reasoning")
-                ))
                 .collect(Collectors.toList());
     }
 }

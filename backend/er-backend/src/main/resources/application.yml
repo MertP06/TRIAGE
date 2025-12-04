@@ -4,19 +4,20 @@ server:
 spring:
   datasource:
     url: jdbc:postgresql://localhost:5432/hospital_er
-    username: er_user
-    password: er_pass
-
+    username: postgres
+    password: 1234
   jpa:
     hibernate:
       ddl-auto: update
-    show-sql: true
+    show-sql: false
     properties:
       hibernate:
         format_sql: true
 
-# opsiyonel ama faydalı
+app:
+  cors:
+    origins: http://localhost:5173,http://localhost:3000
+
 logging:
   level:
-    org.hibernate.SQL: DEBUG
-    org.hibernate.type.descriptor.sql.BasicBinder: TRACE
+    org.hibernate.SQL: INFO
